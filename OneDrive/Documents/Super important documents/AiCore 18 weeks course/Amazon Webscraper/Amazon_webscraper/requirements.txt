@@ -1,0 +1,11 @@
+selenium
+requests
+pandas
+webdriver-manager
+tqdm
+pydantic
+boto3
+sqlalchemy
+psycopg2-binary
+uuid
+typing
