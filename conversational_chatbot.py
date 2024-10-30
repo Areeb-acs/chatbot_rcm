@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 # Load environment variables and API keys
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
-# os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY")
+os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY")
 
 # Streamlit UI setup
 st.set_page_config(page_title="Onasi RCM Chatbot")
