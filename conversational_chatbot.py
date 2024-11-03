@@ -46,7 +46,9 @@ prompt_template = ChatPromptTemplate.from_template(
     Please provide the most accurate response. You will first understand what the user is asking, and reply based on that accurately from the context and if not 
     then use common sense.
     
-    Like at the start, you need to gather more information from the user, and if the user does not ask a question, then tell him or her to, dont give too long responses
+    Like at the start, you need to gather more information from the user, and if the user does not ask a question, then tell him or her to, dont give too long responses.
+    If the user asks something you do not know, then just say please give me more information, dont give too long 
+    descriptive answers.
     
     <context>
     {context}
