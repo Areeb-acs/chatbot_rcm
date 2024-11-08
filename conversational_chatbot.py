@@ -64,17 +64,7 @@ if 'final_documents' not in st.session_state:
     ]
     
     
-    # Load and process the Excel file
-    excel_file_path = "./Nphies_Validation.xlsx"
-    data_xlsx = pd.read_excel(excel_file_path)
-    # Convert rows to Document objects
-    excel_documents = [
-        Document(page_content=str(row.to_dict()), metadata={"file_type": "excel", "source": "Nphies_Validation.xlsx"})
-        for _, row in data_xlsx.iterrows()
-    ]
-    
-    
-    
+
     # Load JSON data file and batch-process it as needed
     jq_schema = '.[]'
     st.session_state.loader_json = JSONLoader("./Dataset.json", jq_schema=jq_schema, text_content=False)
