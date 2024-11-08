@@ -73,7 +73,7 @@ if 'final_documents' not in st.session_state:
         
     # Define file paths and batch size
     file_paths = ["./Medical_coding.json", "./Nphies_validation.json"]  # Combine file paths into a single list
-    batch_size = 500
+    batch_size = 400
 
     # Initialize list for Document objects
     combined_json_documents = []
