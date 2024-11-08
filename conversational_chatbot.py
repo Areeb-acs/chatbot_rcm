@@ -12,7 +12,6 @@ import os
 from dotenv import load_dotenv  # Loading environment variables
 import pandas as pd
 from langchain.schema import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 
 
 # Load environment variables from a .env file (GROQ API key, OpenAI API key, Pinecone API key, and environment)
