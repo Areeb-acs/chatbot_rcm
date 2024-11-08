@@ -67,8 +67,6 @@ if 'final_documents' not in st.session_state:
 
     # Load JSON data file and batch-process it as needed
     jq_schema = '.[]'
-    st.session_state.loader_json = JSONLoader("./Dataset.json", jq_schema=jq_schema, text_content=False)
-    st.session_state.loader_json_excel = JSONLoader("./excel-to-json.json", jq_schema=jq_schema, text_content=False)
         
     # Define file paths and batch size
     file_paths = ["./Dataset.json", "./excel-to-json.json"]  # Combine file paths into a single list
