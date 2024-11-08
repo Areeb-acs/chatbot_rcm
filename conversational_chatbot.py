@@ -72,7 +72,7 @@ if 'final_documents' not in st.session_state:
     jq_schema = '.[]'
         
     # Define file paths and batch size
-    file_paths = ["./Dataset.json", "./excel-to-json.json"]  # Combine file paths into a single list
+    file_paths = ["./Medical_coding.json", "./Nphies_validation.json"]  # Combine file paths into a single list
     batch_size = 500
 
     # Initialize list for Document objects
@@ -144,7 +144,7 @@ if 'final_documents' not in st.session_state:
         index.upsert(vectors=batch)  # Use the index object for upserting
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
-def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
+def retrieve_relevant_chunks(question, num_chunks=5, file_type=None):
     # Generate an embedding (vector representation) of the user query
     question_embedding = embeddings.embed_query(question)
     
