@@ -81,34 +81,31 @@ if 'final_documents' not in st.session_state:
     jq_schema = '.[]'
     st.session_state.loader_json = JSONLoader("./Dataset.json", jq_schema=jq_schema, text_content=False)
     st.session_state.loader_json_excel = JSONLoader("./excel-to-json.json", jq_schema=jq_schema, text_content=False)
-
-    # Define file path and batch size
-    file_path = "./Dataset.json" 
-    file_path_nphies = "./excel-to-json.json" 
+        
+    # Define file paths and batch size
+    file_paths = ["./Dataset.json", "./excel-to-json.json"]  # Combine file paths into a single list
     batch_size = 1000
 
     # Initialize list for Document objects
-    json_documents = []
-    nphies_documents = []
+    combined_json_documents = []
 
-    data = pd.read_json(file_path)
-    for _, row in data.iterrows():
-        json_documents.append(
-            Document(page_content=str(row.to_dict()), metadata={"file_type": "json", "source": "Dataset.json"})
-        )
-        
-    # Process excel_json.json
-    data_excel = pd.read_json(file_path_nphies)
-    for _, row in data_excel.iterrows():
-        nphies_documents.append(
-            Document(page_content=str(row.to_dict()), metadata={"file_type": "json", "source": "excel-to-json.json"})
-        )
-            
-        # Combine PDF and JSON documents
-    st.session_state.docs = st.session_state.docs_pdf + json_documents + nphies_documents
+    # Process each JSON file and append to a single list
+    for file_path in file_paths:
+        data = pd.read_json(file_path)
+        for _, row in data.iterrows():
+            combined_json_documents.append(
+                Document(
+                    page_content=str(row.to_dict()),
+                    metadata={"file_type": "json", "source": file_path.split('/')[-1]}  # Add source dynamically
+                )
+            )
+
+    # Combine PDF and JSON documents
+    st.session_state.docs = st.session_state.docs_pdf + combined_json_documents
+                
     
     # Split documents into chunks for embedding, using specified chunk size and overlap
-    st.session_state.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=400)
+    st.session_state.text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=400)
     st.session_state.final_documents = st.session_state.text_splitter.split_documents(st.session_state.docs)
 
     # Initialize OpenAI embeddings
@@ -127,13 +124,13 @@ if 'final_documents' not in st.session_state:
         })
 
     # Batch upsert (in case of a large number of vectors, batch them into smaller chunks)
-    batch_size = 100  # Choose an appropriate batch size
+    batch_size = 500  # Choose an appropriate batch size
     for i in range(0, len(docs_to_index), batch_size):
         batch = docs_to_index[i:i + batch_size]
         index.upsert(vectors=batch)  # Use the index object for upserting
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
-def retrieve_relevant_chunks(question, num_chunks=5, file_type=None):
+def retrieve_relevant_chunks(question, num_chunks=3, file_type=None):
     # Generate an embedding (vector representation) of the user query
     question_embedding = embeddings.embed_query(question)
     
