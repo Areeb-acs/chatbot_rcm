@@ -144,10 +144,26 @@ if 'final_documents' not in st.session_state:
         index.upsert(vectors=batch)  # Use the index object for upserting
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
+# Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
 def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
-    # Check if the query contains a number for exact match search
     import re
-    numbers_in_query = re.findall(r'\d+', question)  # Extract numbers from the query
+    
+    # Extract numbers and Rule IDs from the query
+    numbers_in_query = re.findall(r'\d+', question)  # Extract numbers
+    rule_id_match = re.search(r'\bBV-\d+\b', question)  # Match Rule IDs like "BV-00027"
+
+    # Check for exact match search based on Rule ID
+    if rule_id_match:
+        rule_id_to_search = rule_id_match.group(0)  # Extract matched Rule ID
+        matches = [
+            doc.page_content
+            for doc in st.session_state.final_documents
+            if rule_id_to_search in doc.page_content  # Check if the Rule ID exists in the page content
+        ]
+        if matches:
+            return "\n".join(matches[:num_chunks])  # Return top 'num_chunks' matches
+
+    # Check for exact match search based on numbers
     if numbers_in_query:
         number_to_search = numbers_in_query[0]  # Assume we're searching for the first number found
         matches = [
