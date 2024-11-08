@@ -11,7 +11,6 @@ import pinecone  # Pinecone client for vector storage
 import os
 from dotenv import load_dotenv  # Loading environment variables
 import pandas as pd
-import ijson
 from langchain.schema import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
