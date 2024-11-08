@@ -12,15 +12,18 @@ import os
 from dotenv import load_dotenv  # Loading environment variables
 import pandas as pd
 from langchain.schema import Document
+from tqdm import tqdm
+import multiprocessing
 
-
+from concurrent.futures import ThreadPoolExecutor
+from tqdm import tqdm
 # Load environment variables from a .env file (GROQ API key, OpenAI API key, Pinecone API key, and environment)
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY")
 # embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 # Replace HuggingFace embeddings with OpenAI embeddings
-embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+embeddings = OpenAIEmbeddings()
 # Importing Pinecone-specific classes to set up connection and configuration
 from pinecone import Pinecone, ServerlessSpec
 
@@ -39,7 +42,7 @@ index_name = "rcm-new-applications"
 if index_name not in pc.list_indexes().names():
     pc.create_index(
         name=index_name,
-        dimension=1500,  # Embedding dimension must match the OpenAI embedding model dimension (1536 for text-embedding-ada-002)
+        dimension=1536,  # Embedding dimension must match the OpenAI embedding model dimension (1536 for text-embedding-ada-002)
         metric="cosine"  # Using cosine similarity as the distance metric
     )
 
@@ -52,7 +55,7 @@ st.title("Onasi RCM Chatbot")
 st.write('Welcome, happy to ask any questions you may have!')
 
 # Initialize ChatGroq model using the provided API key
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="Llama3-8b-8192")
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="gemma-7b-it")
 
 # Document loading and processing (only if 'final_documents' is not already stored in session state)
 if 'final_documents' not in st.session_state:
@@ -62,7 +65,7 @@ if 'final_documents' not in st.session_state:
         Document(page_content=doc.page_content, metadata={"file_type": "pdf", "source": "Onasi_RCM.pdf"})
         for doc in st.session_state.loader_pdf.load()
     ]
-    
+
     
 
     # Load JSON data file and batch-process it as needed
@@ -70,7 +73,7 @@ if 'final_documents' not in st.session_state:
         
     # Define file paths and batch size
     file_paths = ["./Dataset.json", "./excel-to-json.json"]  # Combine file paths into a single list
-    batch_size = 1000
+    batch_size = 500
 
     # Initialize list for Document objects
     combined_json_documents = []
@@ -90,37 +93,58 @@ if 'final_documents' not in st.session_state:
             st.error(f"Error processing JSON file {file_path}: {e}")
 
     # Combine PDF and JSON documents
-    st.session_state.docs = st.session_state.docs_pdf + combined_json_documents
+    st.session_state.docs = st.session_state.docs_pdf +  combined_json_documents
 
                 
     
     # Split documents into chunks for embedding, using specified chunk size and overlap
-    st.session_state.text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=400)
+    st.session_state.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=400)
     st.session_state.final_documents = st.session_state.text_splitter.split_documents(st.session_state.docs)
 
     # Initialize OpenAI embeddings
     # st.session_state.embeddings = OpenAIEmbeddings()
     st.session_state.pinecone_index = Pinecone(index_name=index_name)
 
+    chunks = [doc.page_content for doc in st.session_state.final_documents]
+    embedding_batches = []
+
+    # Generate embeddings using threads
+    def generate_embeddings_threading(chunks, embeddings, batch_size=200):
+        embeddings_list = []
+
+        def embed_chunk(chunk):
+            return embeddings.embed_query(chunk)
+
+        with ThreadPoolExecutor() as executor:
+            for i in tqdm(range(0, len(chunks), batch_size), desc="Generating embeddings"):
+                batch = chunks[i:i + batch_size]
+                embeddings_list.extend(executor.map(embed_chunk, batch))
+
+        return embeddings_list
+
+    # Call the function
+    embedding_batches = generate_embeddings_threading(chunks, embeddings)
     # Prepare documents for insertion into Pinecone
     # Prepare documents for insertion into Pinecone
-    docs_to_index = []
-    for doc in st.session_state.final_documents:
-        embedding = embeddings.embed_query(doc.page_content)
-        docs_to_index.append({
+    # Prepare documents for Pinecone upsert
+
+    docs_to_index = [
+        {
             "id": doc.metadata.get("id", str(hash(doc.page_content))),
-            "values": embedding,
-            "metadata": {"page_content": doc.page_content, **doc.metadata}  # Include page_content in metadata
-        })
+            "values": embedding_batches[idx],
+            "metadata": {"page_content": doc.page_content, **doc.metadata}
+        }
+        for idx, doc in enumerate(st.session_state.final_documents)
+    ]
 
     # Batch upsert (in case of a large number of vectors, batch them into smaller chunks)
-    batch_size = 500  # Choose an appropriate batch size
+    batch_size = 200  # Choose an appropriate batch size
     for i in range(0, len(docs_to_index), batch_size):
         batch = docs_to_index[i:i + batch_size]
         index.upsert(vectors=batch)  # Use the index object for upserting
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
-def retrieve_relevant_chunks(question, num_chunks=3, file_type=None):
+def retrieve_relevant_chunks(question, num_chunks=5, file_type=None):
     # Generate an embedding (vector representation) of the user query
     question_embedding = embeddings.embed_query(question)
     
@@ -145,28 +169,11 @@ def retrieve_relevant_chunks(question, num_chunks=3, file_type=None):
 # Define the template for generating prompts with context and input placeholders
 prompt_template = ChatPromptTemplate.from_template(
     """
-    You are a specialized conversational chatbot designed to accurately retrieve and provide information on medical codes, Validation rules,
-    and the RCM (Revenue Cycle Management) application. Only answer from the provided context. So we have RCM manual, Nphies Validation and medical coding data
-    You are an expert in these three, the first source of information should be these files, if you cannot find information from them, you will give an informative answer about 
-    what could be a potential answer or where can you find such information. 
+    Answer the question based on the provided context. Only search given the context, do not use any other information source.
+    Please provide the most accurate response. You will first understand what the user is asking, and reply based on that accurately from the context.
     
-    Focus on Rule IDs and their descriptions. If a specific Rule ID is mentioned (e.g., BV-00012), ensure it is retrieved from the provided JSON data.
-
-    
-    Use the JSON data as your primary reference to answer questions 
-    about specific codes, their values, and descriptions. Also search in Onasi RCM if the user asks for RCM application.
-    
-    Answer accurately and succintly to questions based on the provided context. 
-   
-    Do not say from this file, always respond with within my information or scope ...
-
-    Instructions:
-    - You are a friendly chatbot who welcomes the user to ask any questions and happy to help any time, do not say context is quite expensive.
-    - If there are many codes the user is asking about, provide information in table format.
-    - Search meticuously for all validation rules like BV-0002 and provide relevant information when asked from the Nphies Validation file.
-    - If the user asks for a specific code, provide the code and its description.
-    - Give the most pertinant answer possible, if information is too much, output in table format or just a summary.
-    - Do not give answers more than 4 lines.
+    You are an expert in knowing about the RCM application, medical coding and nphies validation codes.
+    When the user asks you to search for Rule ID, you will go into the your excel to json.json file, go into "Nphies Rules and Codes- OBA" then search for Rule IDs inside, if you find relevant information, then output it.
 
     <context>
     {context}
@@ -174,6 +181,7 @@ prompt_template = ChatPromptTemplate.from_template(
     Question: {input}
     """
 )
+
 
 # Function to generate a response based on the user query and context
 def get_chatgroq_response(question, file_type=None):
