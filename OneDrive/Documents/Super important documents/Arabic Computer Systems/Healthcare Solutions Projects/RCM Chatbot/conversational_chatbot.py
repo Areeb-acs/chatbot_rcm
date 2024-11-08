@@ -38,12 +38,12 @@ pinecone_env = os.getenv("PINECONE_ENV")
 # Initialize Pinecone client with the specified API key and environment
 pc = Pinecone(api_key=pinecone_api_key, environment=pinecone_env)
 # Define or create an index if it doesn't already exist
-index_name = "rcm-new-applications"
+index_name = "rcm-app-3"
 if index_name not in pc.list_indexes().names():
     pc.create_index(
         name=index_name,
         dimension=1536,  # Embedding dimension must match the OpenAI embedding model dimension (1536 for text-embedding-ada-002)
-        metric="cosine"  # Using cosine similarity as the distance metric
+        metric="euclidean"  # Using cosine similarity as the distance metric
     )
 
 # Retrieve the index for further operations
@@ -144,25 +144,32 @@ if 'final_documents' not in st.session_state:
         index.upsert(vectors=batch)  # Use the index object for upserting
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
-def retrieve_relevant_chunks(question, num_chunks=5, file_type=None):
-    # Generate an embedding (vector representation) of the user query
+def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
+    # Check if the query contains a number for exact match search
+    import re
+    numbers_in_query = re.findall(r'\d+', question)  # Extract numbers from the query
+    if numbers_in_query:
+        number_to_search = numbers_in_query[0]  # Assume we're searching for the first number found
+        matches = [
+            doc.page_content
+            for doc in st.session_state.final_documents
+            if number_to_search in doc.page_content  # Check if the number exists in the page content
+        ]
+        if matches:
+            return "\n".join(matches[:num_chunks])  # Return top 'num_chunks' matches
+
+    # Fall back to embedding-based search for more complex queries
     question_embedding = embeddings.embed_query(question)
-    
-    # Create a filter dictionary for the query based on the specified file type, if provided
     filter_dict = {"file_type": file_type} if file_type else {}
-    
-    # Query the Pinecone index to retrieve the most similar documents
     similar_docs = index.query(
-        vector=question_embedding,         # Use the query embedding as the search vector
-        top_k=num_chunks,                  # Retrieve the top 'num_chunks' most similar documents
-        filter=filter_dict,                # Apply the filter if a file type is specified, or use no filter
-        include_values=True,               # Include the actual vector values of the matching documents in the response
-        include_metadata=True              # Include the metadata (e.g., file type, source) of the matching documents in the response
+        vector=question_embedding,
+        top_k=num_chunks,
+        filter=filter_dict,
+        include_values=True,
+        include_metadata=True,
     )
-    
-    # Extract and concatenate the content of the matching documents
-    # If 'page_content' is missing in the metadata, return an empty string for that match
     return "\n".join([match["metadata"].get("page_content", "") for match in similar_docs["matches"]])
+
 
 
 
@@ -173,13 +180,20 @@ prompt_template = ChatPromptTemplate.from_template(
     Please provide the most accurate response. You will first understand what the user is asking, and reply based on that accurately from the context.
     
     You are an expert in knowing about the RCM application, medical coding and nphies validation codes.
+    You are an expert in reading .json data, so you know how to read information from json files.
+    
+    If what the user asks does not exist in knowledge base, like code values or anything, just say you do not know, do not make up things.
     
     Intructions:
-    1. When you respond, do not show the context you are searching, just give a short answer, to the point, if the user ask what is the code value, just answer with number etc.
+    1. When you respond, do not show the context you are searching, just give a short to medium answer, to the point, if the user ask what is the code value, just answer with number etc.
     2. If the answer is not in the given context, mention I cannot find it, out of my knowledge base.
+    3. If you cannot find any relevant information say for example the code value is not present, just say I cannot find it, out of my knowledge base
+    4. You can read json files easily.
+
     <context>
     {context}
     <context>
+    
     Question: {input}
     """
 )
@@ -189,6 +203,7 @@ prompt_template = ChatPromptTemplate.from_template(
 def get_chatgroq_response(question, file_type=None):
     # Retrieve relevant context chunks based on question and optional file_type filter
     context = retrieve_relevant_chunks(question, file_type=file_type)
+    print("==============================================")
     print(context)
     # Format the prompt with context and question
     formatted_prompt = prompt_template.format(context=context, input=question)
@@ -232,5 +247,9 @@ if submit_button and model_input:
         st.rerun()
 
 # Add a reset button to clear chat history
+# Add a reset button to clear chat history only
 if st.button("Reset Chat"):
-    st.session_state.clear()  # Clear all session state variables on reset
+    if 'chat_history' in st.session_state:
+        st.session_state['chat_history'] = []  # Clear only the chat history
+    # Force Streamlit to rerun and refresh the UI
+    st.rerun()
