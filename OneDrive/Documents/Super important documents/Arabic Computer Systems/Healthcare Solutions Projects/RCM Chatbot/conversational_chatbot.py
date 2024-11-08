@@ -176,7 +176,7 @@ def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
 # Define the template for generating prompts with context and input placeholders
 prompt_template = ChatPromptTemplate.from_template(
     """
-    Answer the question based on the provided context. Only search given the context, do not use any other information source.
+    You are friendly conversational chatbot that remembers names, answer the question based on the provided context. Only search given the context, do not use any other information source.
     Please provide the most accurate response. You will first understand what the user is asking, and reply based on that accurately from the context.
     
     You are an expert in knowing about the RCM application, medical coding and nphies validation codes.
