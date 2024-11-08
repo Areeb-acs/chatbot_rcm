@@ -55,7 +55,7 @@ st.title("Onasi RCM Chatbot")
 st.write('Welcome, happy to ask any questions you may have!')
 
 # Initialize ChatGroq model using the provided API key
-llm = ChatGroq(groq_api_key=groq_api_key, model_name="gemma-7b-it")
+llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-8b-8192")
 
 # Document loading and processing (only if 'final_documents' is not already stored in session state)
 if 'final_documents' not in st.session_state:
@@ -144,7 +144,7 @@ if 'final_documents' not in st.session_state:
         index.upsert(vectors=batch)  # Use the index object for upserting
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
-def retrieve_relevant_chunks(question, num_chunks=5, file_type=None):
+def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
     # Generate an embedding (vector representation) of the user query
     question_embedding = embeddings.embed_query(question)
     
@@ -173,8 +173,10 @@ prompt_template = ChatPromptTemplate.from_template(
     Please provide the most accurate response. You will first understand what the user is asking, and reply based on that accurately from the context.
     
     You are an expert in knowing about the RCM application, medical coding and nphies validation codes.
-    When the user asks you to search for Rule ID, you will go into the your excel to json.json file, go into "Nphies Rules and Codes- OBA" then search for Rule IDs inside, if you find relevant information, then output it.
-
+    
+    Intructions:
+    1. When you respond, do not show the context you are searching, just give a short answer, to the point, if the user ask what is the code value, just answer with number etc.
+    2. If the answer is not in the given context, mention I cannot find it, out of my knowledge base.
     <context>
     {context}
     <context>
@@ -187,7 +189,7 @@ prompt_template = ChatPromptTemplate.from_template(
 def get_chatgroq_response(question, file_type=None):
     # Retrieve relevant context chunks based on question and optional file_type filter
     context = retrieve_relevant_chunks(question, file_type=file_type)
-    
+    print(context)
     # Format the prompt with context and question
     formatted_prompt = prompt_template.format(context=context, input=question)
     
