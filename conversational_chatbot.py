@@ -77,19 +77,23 @@ if 'final_documents' not in st.session_state:
     # Initialize list for Document objects
     combined_json_documents = []
 
-    # Process each JSON file and append to a single list
+    # Process each JSON file using pandas
     for file_path in file_paths:
-        data = pd.read_json(file_path)
-        for _, row in data.iterrows():
-            combined_json_documents.append(
-                Document(
-                    page_content=str(row.to_dict()),
-                    metadata={"file_type": "json", "source": file_path.split('/')[-1]}  # Add source dynamically
+        try:
+            data = pd.read_json(file_path)
+            for _, row in data.iterrows():
+                combined_json_documents.append(
+                    Document(
+                        page_content=str(row.to_dict()),
+                        metadata={"file_type": "json", "source": file_path.split('/')[-1]}  # Add source dynamically
+                    )
                 )
-            )
+        except ValueError as e:
+            st.error(f"Error processing JSON file {file_path}: {e}")
 
     # Combine PDF and JSON documents
     st.session_state.docs = st.session_state.docs_pdf + combined_json_documents
+
                 
     
     # Split documents into chunks for embedding, using specified chunk size and overlap
