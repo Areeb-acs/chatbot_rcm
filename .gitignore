@@ -1,3 +1,7 @@
 # Ignore environment variables and sensitive files
 .env
 *.pem
+chatbot_api.py
+RCM_dataset.json
+Nphies_Validation.xlsx
+.csv
