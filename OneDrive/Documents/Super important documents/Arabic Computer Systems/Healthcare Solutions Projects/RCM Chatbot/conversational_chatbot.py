@@ -9,6 +9,8 @@ from langchain_community.vectorstores import Pinecone
 from langchain_openai import OpenAIEmbeddings  # Using OpenAI embeddings for vectorization
 import pinecone  # Pinecone client for vector storage
 import os
+from PIL import Image  # For loading logo images
+
 from dotenv import load_dotenv  # Loading environment variables
 import pandas as pd
 from langchain.schema import Document
@@ -21,6 +23,7 @@ from tqdm import tqdm
 load_dotenv()
 groq_api_key = os.getenv("GROQ_API_KEY")
 os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_API_KEY")
+
 # embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 # Replace HuggingFace embeddings with OpenAI embeddings
 embeddings = OpenAIEmbeddings()
@@ -50,9 +53,45 @@ if index_name not in pc.list_indexes().names():
 index = pc.Index(index_name)  # Retrieve or interact with the specified index
 
 # Set up Streamlit user interface with title and introductory text
-st.set_page_config(page_title="Onasi RCM Chatbot")
-st.title("Onasi RCM Chatbot")
+# Set up Streamlit app configurations
+st.set_page_config(
+    page_title="Revenue Cycle Management Chatbot",
+    page_icon="💬",  # You can replace this with a custom emoji or icon
+    layout="wide"
+)
+
+# Display a logo at the top of the app
+logo = Image.open("./onasi_logo.png")  # Replace with your logo's file path
+# Create three columns with adjusted widths
+col1, col2, col3 = st.columns([3, 3, 1])  # Make col1 wider to push the image right
+
+# Place the image in the center-right column
+with col2:
+    st.image(logo, width=300)  # Adjust width as needed
+
+
+# Add the language dropdown in the third column
+with col3:
+    language = st.selectbox("Language", options=["English", "Arabic"], index=0)
+    
+# App title and introductory text
+st.title("RCM Chatbot")
 st.write('Welcome, happy to ask any questions you may have!')
+
+# Inject custom CSS for styling
+st.markdown(
+    """
+    <style>
+    /* Set the textbox background to white */
+
+
+
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # Initialize ChatGroq model using the provided API key
 llm = ChatGroq(groq_api_key=groq_api_key, model_name="llama3-8b-8192")
@@ -190,7 +229,7 @@ def retrieve_relevant_chunks(question, num_chunks=8, file_type=None):
 
 
 # Define the template for generating prompts with context and input placeholders
-prompt_template = ChatPromptTemplate.from_template(
+prompt_template = ChatPromptTemplate.from_template( 
     """
     You are a friendly conversational chatbot that remembers context across a conversation. Use the provided conversation history to understand the user's question and provide clear, concise, and accurate responses for doctors.
 
