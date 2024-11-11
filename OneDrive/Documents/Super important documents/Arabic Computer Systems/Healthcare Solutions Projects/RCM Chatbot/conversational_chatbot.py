@@ -145,7 +145,7 @@ if 'final_documents' not in st.session_state:
 
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
 # Function to retrieve relevant chunks of documents based on a user query, with an optional filter for document type
-def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
+def retrieve_relevant_chunks(question, num_chunks=8, file_type=None):
     import re
     
     # Extract numbers and Rule IDs from the query
@@ -192,20 +192,22 @@ def retrieve_relevant_chunks(question, num_chunks=10, file_type=None):
 # Define the template for generating prompts with context and input placeholders
 prompt_template = ChatPromptTemplate.from_template(
     """
-    You are friendly conversational chatbot that remembers names, answer the question based on the provided context and general knowledge.
-    Please provide the most accurate response. You will first understand what the user is asking, and reply based on that accurately from the context.
-    
-    Instructions:
-    1. Always answer in plain english, read the information and provide in plain english for the doctor.
+    You are a friendly conversational chatbot that remembers context across a conversation. Use the provided conversation history to understand the user's question and provide clear, concise, and accurate responses for doctors.
 
-    <context>
+    Instructions:
+    1. Always refer to the conversation history for context and maintain continuity in your responses.
+    2. Answer questions in plain English and ensure your response is easy to understand for a doctor.
+    3. When asked to summarize, base the summary only on the relevant details from the conversation history. Ignore any newly retrieved chunks or external context for summarization tasks.
+    4. For requests like "summarize the above information," focus only on the most recent exchanges in the conversation history. Extract and condense the key points into a concise response.
+    5. When answering non-summarization queries, you may use the retrieved context along with the conversation history to provide accurate and complete responses.
+
+    Conversation History:
     {context}
-    <context>
-    
-    Question: {input}
+
+    Current Question:
+    {input}
     """
 )
-
 # prompt_template = ChatPromptTemplate.from_template(
 #     """
 #     You are friendly conversational chatbot that remembers names, answer the question based on the provided context. Only search given the context, do not use any other information source.
@@ -231,10 +233,23 @@ prompt_template = ChatPromptTemplate.from_template(
 # )
 
 
+def handle_query(question, file_type=None):
+    # Check if the question is a summarization request
+    if "summarize" in question.lower() or "summarise" in question.lower() or "above" in question.lower() or "summarize the above" in question.lower():
+        # Use only the conversation history for summarization
+        context = "\n".join([f"User: {entry['question']}\nAI: {entry['answer']}" for entry in st.session_state['chat_history']])
+    else:
+        # Use both conversation history and retrieved context for other queries
+        context = retrieve_relevant_chunks(question)
+
+    # Format the prompt
+    formatted_prompt = prompt_template.format(context=context, input=question)
+    return formatted_prompt
+
 # Function to generate a response based on the user query and context
 def get_chatgroq_response(question, file_type=None):
     # Retrieve relevant context chunks based on question and optional file_type filter
-    context = retrieve_relevant_chunks(question, file_type=file_type)
+    context = handle_query(question, file_type=file_type)
     print("==============================================")
     print(context)
     # Format the prompt with context and question
@@ -254,7 +269,24 @@ def get_chatgroq_response(question, file_type=None):
     
     return answer.content
 
+# Define a maximum chat history size
+MAX_CHAT_HISTORY_SIZE = 20  # Adjust as needed based on token limits
+
+# Function to trim chat history
+def trim_chat_history():
+    if len(st.session_state['chat_history']) > MAX_CHAT_HISTORY_SIZE:
+        st.session_state['chat_history'] = st.session_state['chat_history'][-MAX_CHAT_HISTORY_SIZE:]
 # Display previous chat history (maintaining chat session in Streamlit)
+# Function to summarize chat history
+def summarize_chat_history(chat_history):
+    if len(chat_history) > MAX_CHAT_HISTORY_SIZE:
+        summary_prompt = "Summarize the following conversation context:\n\n"
+        chat_context = "\n".join([f"User: {entry['question']}\nAI: {entry['answer']}" for entry in chat_history[:-MAX_CHAT_HISTORY_SIZE]])
+        summary = llm([SystemMessage(content=summary_prompt + chat_context)]).content
+        summarized_entry = {"question": "Summarized Context", "answer": summary}
+        return chat_history[-MAX_CHAT_HISTORY_SIZE:] + [summarized_entry]
+    return chat_history
+
 if 'chat_history' not in st.session_state:
     st.session_state['chat_history'] = []
 
@@ -274,6 +306,12 @@ if submit_button and model_input:
         
         # Append question-response pair to chat history
         st.session_state['chat_history'].append({"question": model_input, "answer": response})
+        
+        # # Trim chat history to maintain size limit
+        # trim_chat_history()
+        
+                # Summarize chat history if it exceeds the maximum size
+        st.session_state['chat_history'] = summarize_chat_history(st.session_state['chat_history'])
         
         # Rerun Streamlit to display updated chat history
         st.rerun()
